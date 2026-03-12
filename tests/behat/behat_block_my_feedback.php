@@ -86,12 +86,20 @@ class behat_block_my_feedback extends behat_base {
             throw new \coding_exception('Unknown assessment type: ' . $assessmenttype);
         }
 
-        $cmid = $this->get_cmid_by_activity_name($activityname);
-        $record = $DB->get_record('local_assess_type', ['cmid' => $cmid], '*', MUST_EXIST);
-        $record->type = $mapping[$assessmenttype];
-        $DB->update_record('local_assess_type', $record);
-
         $activity = $this->get_activity_by_name($activityname);
+
+        $record = $DB->get_record('local_assess_type', ['cmid' => $activity->cmid]);
+        if ($record) {
+            $record->type = $mapping[$assessmenttype];
+            $DB->update_record('local_assess_type', $record);
+        } else {
+            $record = new \stdClass();
+            $record->cmid = $activity->cmid;
+            $record->type = $mapping[$assessmenttype];
+            $record->locked = 0;
+            $DB->insert_record('local_assess_type', $record);
+        }
+
         $cm = get_coursemodule_from_id($activity->modname, $activity->cmid, 0, false, MUST_EXIST);
         rebuild_course_cache($cm->course, true);
     }
@@ -144,10 +152,9 @@ class behat_block_my_feedback extends behat_base {
     public function i_set_activity_to_visibility(string $activityname, string $visibility): void {
         global $DB;
 
-        $cmid = $this->get_cmid_by_activity_name($activityname);
-        $DB->set_field('course_modules', 'visible', $visibility === 'visible' ? 1 : 0, ['id' => $cmid]);
-
         $activity = $this->get_activity_by_name($activityname);
+        $DB->set_field('course_modules', 'visible', $visibility === 'visible' ? 1 : 0, ['id' => $activity->cmid]);
+
         $cm = get_coursemodule_from_id($activity->modname, $activity->cmid, 0, false, MUST_EXIST);
         rebuild_course_cache($cm->course, true);
     }
@@ -222,30 +229,46 @@ class behat_block_my_feedback extends behat_base {
     private function get_activity_by_name(string $activityname): \stdClass {
         global $DB;
 
-        $sql = "SELECT cm.id AS cmid, m.name AS modname, cm.instance AS instanceid
-                  FROM {course_modules} cm
-                  JOIN {modules} m ON m.id = cm.module
-                  LEFT JOIN {assign} a ON m.name = 'assign' AND a.id = cm.instance
-                  LEFT JOIN {quiz} q ON m.name = 'quiz' AND q.id = cm.instance
-                  LEFT JOIN {turnitintooltwo} t ON m.name = 'turnitintooltwo' AND t.id = cm.instance
-                 WHERE (a.name = :activityname1 OR q.name = :activityname2 OR t.name = :activityname3)";
+        $matches = [];
+        $modules = $DB->get_records('modules', null, '', 'name');
 
-        return $DB->get_record_sql($sql, [
-            'activityname1' => $activityname,
-            'activityname2' => $activityname,
-            'activityname3' => $activityname,
-        ], MUST_EXIST);
-    }
+        foreach ($modules as $module) {
+            $tablename = $module->name;
 
-    /**
-     * Get cmid by activity name.
-     *
-     * @param string $activityname
-     * @return int
-     */
-    private function get_cmid_by_activity_name(string $activityname): int {
-        $activity = $this->get_activity_by_name($activityname);
-        return (int) $activity->cmid;
+            if (!$DB->get_manager()->table_exists($tablename)) {
+                continue;
+            }
+
+            $columns = $DB->get_columns($tablename);
+            if (!isset($columns['name'])) {
+                continue;
+            }
+
+            $sql = "SELECT cm.id AS cmid, m.name AS modname, cm.instance AS instanceid
+                      FROM {course_modules} cm
+                      JOIN {modules} m ON m.id = cm.module
+                      JOIN {" . $tablename . "} modinstance ON modinstance.id = cm.instance
+                     WHERE m.name = :modname AND modinstance.name = :activityname";
+
+            $records = $DB->get_records_sql($sql, [
+                'modname' => $module->name,
+                'activityname' => $activityname,
+            ]);
+
+            foreach ($records as $record) {
+                $matches[] = $record;
+            }
+        }
+
+        if (count($matches) === 0) {
+            throw new \coding_exception('Could not find activity with name: ' . $activityname);
+        }
+
+        if (count($matches) > 1) {
+            throw new \coding_exception('Activity name is ambiguous (multiple modules found): ' . $activityname);
+        }
+
+        return reset($matches);
     }
 
     /**
