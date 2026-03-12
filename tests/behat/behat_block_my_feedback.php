@@ -90,6 +90,10 @@ class behat_block_my_feedback extends behat_base {
         $record = $DB->get_record('local_assess_type', ['cmid' => $cmid], '*', MUST_EXIST);
         $record->type = $mapping[$assessmenttype];
         $DB->update_record('local_assess_type', $record);
+
+        $activity = $this->get_activity_by_name($activityname);
+        $cm = get_coursemodule_from_id($activity->modname, $activity->cmid, 0, false, MUST_EXIST);
+        rebuild_course_cache($cm->course, true);
     }
 
     /**
@@ -104,27 +108,29 @@ class behat_block_my_feedback extends behat_base {
         global $DB;
 
         $activity = $this->get_activity_by_name($activityname);
+        $cm = get_coursemodule_from_id($activity->modname, $activity->cmid, 0, false, MUST_EXIST);
+        $courseid = $cm->course;
+
         $timestamp = strtotime($relative);
         if ($timestamp === false) {
             throw new \coding_exception('Invalid relative date string: ' . $relative);
         }
 
-        if ($activity->modname === 'assign') {
-            $DB->set_field('assign', 'duedate', $timestamp, ['id' => $activity->instanceid]);
-            return;
+        switch ($activity->modname) {
+            case 'assign':
+                $DB->set_field('assign', 'duedate', $timestamp, ['id' => $activity->instanceid]);
+                break;
+            case 'quiz':
+                $DB->set_field('quiz', 'timeclose', $timestamp, ['id' => $activity->instanceid]);
+                break;
+            case 'turnitintooltwo':
+                $DB->set_field('turnitintooltwo_parts', 'dtdue', $timestamp, ['turnitintooltwoid' => $activity->instanceid]);
+                break;
+            default:
+                throw new \coding_exception('Unsupported activity type for due date update: ' . $activity->modname);
         }
 
-        if ($activity->modname === 'quiz') {
-            $DB->set_field('quiz', 'timeclose', $timestamp, ['id' => $activity->instanceid]);
-            return;
-        }
-
-        if ($activity->modname === 'turnitintooltwo') {
-            $DB->set_field('turnitintooltwo_parts', 'dtdue', $timestamp, ['turnitintooltwoid' => $activity->instanceid]);
-            return;
-        }
-
-        throw new \coding_exception('Unsupported activity type for due date update: ' . $activity->modname);
+        rebuild_course_cache($courseid, true);
     }
 
     /**
@@ -140,6 +146,10 @@ class behat_block_my_feedback extends behat_base {
 
         $cmid = $this->get_cmid_by_activity_name($activityname);
         $DB->set_field('course_modules', 'visible', $visibility === 'visible' ? 1 : 0, ['id' => $cmid]);
+
+        $activity = $this->get_activity_by_name($activityname);
+        $cm = get_coursemodule_from_id($activity->modname, $activity->cmid, 0, false, MUST_EXIST);
+        rebuild_course_cache($cm->course, true);
     }
 
     /**
@@ -154,6 +164,9 @@ class behat_block_my_feedback extends behat_base {
         global $DB;
 
         $DB->set_field('course', 'visible', $visibility === 'visible' ? 1 : 0, ['shortname' => $courseshortname]);
+
+        $course = $DB->get_record('course', ['shortname' => $courseshortname], '*', MUST_EXIST);
+        rebuild_course_cache($course->id, true);
     }
 
     /**
@@ -173,6 +186,9 @@ class behat_block_my_feedback extends behat_base {
         }
 
         $DB->set_field('course', 'startdate', $timestamp, ['shortname' => $courseshortname]);
+
+        $course = $DB->get_record('course', ['shortname' => $courseshortname], '*', MUST_EXIST);
+        rebuild_course_cache($course->id, true);
     }
 
     /**
@@ -192,6 +208,9 @@ class behat_block_my_feedback extends behat_base {
         }
 
         $DB->set_field('course', 'enddate', $timestamp, ['shortname' => $courseshortname]);
+
+        $course = $DB->get_record('course', ['shortname' => $courseshortname], '*', MUST_EXIST);
+        rebuild_course_cache($course->id, true);
     }
 
     /**
@@ -227,6 +246,33 @@ class behat_block_my_feedback extends behat_base {
     private function get_cmid_by_activity_name(string $activityname): int {
         $activity = $this->get_activity_by_name($activityname);
         return (int) $activity->cmid;
+    }
+
+    /**
+     * Assert text order on page.
+     *
+     * @Then /^I should see "(?P<first>[^"]*)" before "(?P<second>[^"]*)"$/
+     * @param string $first
+     * @param string $second
+     * @return void
+     */
+    public function i_should_see_before(string $first, string $second): void {
+        $content = $this->getSession()->getPage()->getText();
+
+        $firstpos = mb_strpos($content, $first);
+        $secondpos = mb_strpos($content, $second);
+
+        if ($firstpos === false) {
+            throw new \coding_exception('Could not find first text on page: ' . $first);
+        }
+
+        if ($secondpos === false) {
+            throw new \coding_exception('Could not find second text on page: ' . $second);
+        }
+
+        if ($firstpos >= $secondpos) {
+            throw new \coding_exception('Expected "' . $first . '" to appear before "' . $second . '".');
+        }
     }
 }
 

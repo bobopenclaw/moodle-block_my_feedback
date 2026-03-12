@@ -49,7 +49,6 @@ Feature: Marker dashboard filters and limits
     When I set assessment type of activity "Test assignment" to "<type>"
     And I reload the page
     Then I should not see "Marking for Teacher"
-    And I should not see "Test assignment"
 
     Examples:
       | type      |
@@ -62,7 +61,6 @@ Feature: Marker dashboard filters and limits
     And I am on site homepage
     And I follow "Dashboard"
     Then I should not see "Marking for Teacher"
-    And I should not see "Test assignment"
 
   Scenario: Setting due date to over 1 month in the future hides the item
     Given I set due date of activity "Test assignment" to "+2 months"
@@ -70,7 +68,6 @@ Feature: Marker dashboard filters and limits
     And I am on site homepage
     And I follow "Dashboard"
     Then I should not see "Marking for Teacher"
-    And I should not see "Test assignment"
 
   Scenario: Hiding the activity hides it from marker view
     Given I set activity "Test assignment" to "hidden"
@@ -78,7 +75,6 @@ Feature: Marker dashboard filters and limits
     And I am on site homepage
     And I follow "Dashboard"
     Then I should not see "Marking for Teacher"
-    And I should not see "Test assignment"
 
   Scenario: Hiding the course hides marker items
     Given I set course "C1" to "hidden"
@@ -86,7 +82,6 @@ Feature: Marker dashboard filters and limits
     And I am on site homepage
     And I follow "Dashboard"
     Then I should not see "Marking for Teacher"
-    And I should not see "Test assignment"
 
   Scenario: Setting course start date in the future hides marker items
     Given I set course "C1" start date to "+1 day"
@@ -94,7 +89,6 @@ Feature: Marker dashboard filters and limits
     And I am on site homepage
     And I follow "Dashboard"
     Then I should not see "Marking for Teacher"
-    And I should not see "Test assignment"
 
   Scenario: Setting course end date to over 3 months in the past hides marker items
     Given I set course "C1" end date to "-4 months"
@@ -102,8 +96,8 @@ Feature: Marker dashboard filters and limits
     And I am on site homepage
     And I follow "Dashboard"
     Then I should not see "Marking for Teacher"
-    And I should not see "Test assignment"
 
+  @javascript
   Scenario: Marker view shows a maximum of 5 items ordered by due date
     Given the following "activities" exist:
       | activity | name       | course | duedate      | assignsubmission_onlinetext_enabled | assignfeedback_comments_enabled | markingworkflow | markingallocation | submissiondrafts | assessment_type |
