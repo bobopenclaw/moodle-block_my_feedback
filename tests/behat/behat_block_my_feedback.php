@@ -45,6 +45,7 @@ class behat_block_my_feedback extends behat_base {
         global $DB;
 
         $assignid = $DB->get_field('assign', 'id', ['name' => $assignname]);
+        $cm = get_coursemodule_from_instance('assign', $assignid, 0, false, MUST_EXIST);
         $allocations = $table->getHash();
 
         foreach ($allocations as $allocation) {
@@ -62,6 +63,8 @@ class behat_block_my_feedback extends behat_base {
                 $DB->insert_record('assign_user_flags', $record);
             }
         }
+
+        rebuild_course_cache($cm->course, true);
     }
 
     /**
