@@ -97,6 +97,40 @@ Feature: Marker dashboard filters and limits
     And I follow "Dashboard"
     Then I should not see "Marking for Teacher"
 
+  Scenario: Quiz with a due date of today and an attempt to mark is shown
+    Given the following "activity" exists:
+      | activity        | quiz      |
+      | name            | Test quiz |
+      | course          | C1        |
+      | timeopen        | ##yesterday## |
+      | timeclose       | ##tomorrow## |
+      | assessment_type | 1         |
+    And the following "mod_quiz > attempts" exist:
+      | quiz      | user     |
+      | Test quiz | student1 |
+    And I set due date of activity "Test quiz" to "now"
+    And I am logged in as "teacher1"
+    And I am on site homepage
+    And I follow "Dashboard"
+    Then I should see "Marking for Teacher"
+    And I should see "Test quiz"
+
+  Scenario: Turnitin assignment with a due date of today and a submission to mark is shown
+    Given the following "activity" exists:
+      | activity        | turnitintooltwo |
+      | name            | Test turnitin   |
+      | course          | C1              |
+      | assessment_type | 1               |
+    And the following "mod_turnitintooltwo > submissions" exist:
+      | turnitintooltwo | user     | title               |
+      | Test turnitin   | student1 | Turnitin submission |
+    And I set due date of activity "Test turnitin" to "now"
+    And I am logged in as "teacher1"
+    And I am on site homepage
+    And I follow "Dashboard"
+    Then I should see "Marking for Teacher"
+    And I should see "Test turnitin"
+
   @javascript
   Scenario: Marker view shows a maximum of 5 items ordered by due date
     Given the following "activities" exist:
