@@ -146,13 +146,13 @@ class behat_block_my_feedback extends behat_base
     }
 
     /**
-     * Create a finished quiz attempt for a user.
+     * Create finished quiz attempts for users.
      *
-     * @Given /^the following "mod_quiz > attempts" exist:$/
+     * @Given /^the following quiz attempts exist:$/
      * @param TableNode $table
      * @return void
      */
-    public function the_following_mod_quiz_attempts_exist(TableNode $table): void {
+    public function the_following_quiz_attempts_exist(TableNode $table): void {
         global $DB;
 
         foreach ($table->getHash() as $row) {
@@ -179,55 +179,6 @@ class behat_block_my_feedback extends behat_base
             $DB->insert_record('quiz_attempts', $attempt);
 
             $cm = get_coursemodule_from_id('quiz', $activity->cmid, 0, false, MUST_EXIST);
-            rebuild_course_cache($cm->course, true);
-        }
-    }
-
-    /**
-     * Create a Turnitin submission for a user.
-     *
-     * @Given /^the following "mod_turnitintooltwo > submissions" exist:$/
-     * @param TableNode $table
-     * @return void
-     */
-    public function the_following_mod_turnitintooltwo_submissions_exist(TableNode $table): void {
-        global $DB;
-
-        foreach ($table->getHash() as $row) {
-            $activity = $this->get_activity_by_name($row['turnitintooltwo']);
-            if ($activity->modname !== 'turnitintooltwo') {
-                throw new \coding_exception('Activity is not Turnitin: ' . $row['turnitintooltwo']);
-            }
-
-            $userid = $DB->get_field('user', 'id', ['username' => $row['user']], MUST_EXIST);
-            $partid = $DB->get_field('turnitintooltwo_parts', 'id', ['turnitintooltwoid' => $activity->instanceid]);
-
-            $submission = new \stdClass();
-            $submission->submission_objectid = 1;
-            $submission->submission_score = null;
-            $submission->submission_score_matches = 0;
-            $submission->submission_title = $row['title'] ?? 'Test submission';
-            $submission->submission_type = 1;
-            $submission->submission_paperid = 1;
-            $submission->submission_part = $partid ?: 0;
-            $submission->submission_ppd = 0;
-            $submission->submission_gmttimestamp = time() - MINSECS;
-            $submission->submission_student = $userid;
-            $submission->submission_status = 100;
-            $submission->submission_unanon = 0;
-            $submission->submission_modified = time() - MINSECS;
-            $submission->submission_parent = 0;
-            $submission->submission_submitted = 1;
-            $submission->submission_queued = 0;
-            $submission->submission_attempts = 1;
-            $submission->submission_lock = 0;
-            $submission->submission_by = $userid;
-            $submission->submission_anon = 0;
-            $submission->turnitintooltwoid = $activity->instanceid;
-            $submission->userid = $userid;
-            $DB->insert_record('turnitintooltwo_submissions', $submission);
-
-            $cm = get_coursemodule_from_id('turnitintooltwo', $activity->cmid, 0, false, MUST_EXIST);
             rebuild_course_cache($cm->course, true);
         }
     }
