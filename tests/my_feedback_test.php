@@ -359,6 +359,12 @@ final class my_feedback_test extends advanced_testcase {
         $block = new \block_my_feedback();
         $block->page = $page;
 
+        $submissions = $block->get_submissions($student);
+        $this->assertNotEmpty($submissions);
+        $this->assertEquals('coursework', $submissions[0]->modname);
+        $this->assertEquals(1, (int)$submissions[0]->assessoranonymity);
+        $this->assertTrue(empty($submissions[0]->hidegrader));
+
         $feedback = $block->fetch_feedback($student);
 
         $this->assertNotEmpty($feedback);
@@ -423,6 +429,12 @@ final class my_feedback_test extends advanced_testcase {
 
         $block = new \block_my_feedback();
         $block->page = $page;
+
+        $submissions = $block->get_submissions($student);
+        $this->assertNotEmpty($submissions);
+        $this->assertEquals('coursework', $submissions[0]->modname);
+        $this->assertEquals(0, (int)$submissions[0]->assessoranonymity);
+        $this->assertTrue(empty($submissions[0]->hidegrader));
 
         $feedback = $block->fetch_feedback($student);
 
