@@ -300,6 +300,137 @@ final class my_feedback_test extends advanced_testcase {
         $this->assertEqualsCanonicalizing([$course1->id, $course2->id], $courses);
     }
 
+
+    /**
+     * Test coursework marker identity is hidden when assessor anonymity is enabled.
+     *
+     * @return void
+     * @throws \coding_exception
+     * @throws \dml_exception
+     * @covers ::fetch_feedback
+     */
+    public function test_fetch_feedback_hides_coursework_marker_when_anonymous(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        if (!$DB->get_manager()->table_exists('coursework')) {
+            $this->markTestSkipped('mod_coursework is not installed.');
+        }
+
+        $course = $this->getDataGenerator()->create_course();
+        $page = new \moodle_page();
+        $page->set_context(context_course::instance($course->id));
+        $page->set_pagelayout('course');
+
+        $student = $this->getDataGenerator()->create_user(['firstname' => 'Student', 'lastname' => '1']);
+        $teacher = $this->getDataGenerator()->create_user(['firstname' => 'Teacher', 'lastname' => '1']);
+
+        $this->getDataGenerator()->enrol_user($student->id, $course->id, 'student');
+        $this->getDataGenerator()->enrol_user($teacher->id, $course->id, 'teacher');
+
+        $module = $this->getDataGenerator()->create_module('coursework', [
+            'course' => $course->id,
+            'name' => 'Anonymous coursework',
+            'deadline' => time() + DAYSECS,
+            'assessment_type' => 1,
+            'assessoranonymity' => 1,
+        ]);
+        $cm = get_coursemodule_from_instance('coursework', $module->id, $course->id);
+
+        $gradeitem = $this->getDataGenerator()->create_grade_item([
+            'courseid' => $course->id,
+            'itemmodule' => $cm->modname,
+            'iteminstance' => $cm->instance,
+            'itemname' => 'Anonymous coursework',
+        ]);
+
+        $this->getDataGenerator()->create_grade_grade([
+            'itemid' => $gradeitem->id,
+            'userid' => $student->id,
+            'teamsubmission' => false,
+            'attemptnumber' => 0,
+            'grade' => '80',
+            'usermodified' => $teacher->id,
+            'timemodified' => time() - MINSECS,
+        ]);
+
+        $block = new \block_my_feedback();
+        $block->page = $page;
+
+        $feedback = $block->fetch_feedback($student);
+
+        $this->assertNotEmpty($feedback);
+        $this->assertEquals('Anonymous coursework', $feedback[0]->name);
+        $this->assertObjectNotHasProperty('tutorname', $feedback[0]);
+    }
+
+    /**
+     * Test coursework marker identity is shown when assessor anonymity is disabled.
+     *
+     * @return void
+     * @throws \coding_exception
+     * @throws \dml_exception
+     * @covers ::fetch_feedback
+     */
+    public function test_fetch_feedback_shows_coursework_marker_when_not_anonymous(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        if (!$DB->get_manager()->table_exists('coursework')) {
+            $this->markTestSkipped('mod_coursework is not installed.');
+        }
+
+        $course = $this->getDataGenerator()->create_course();
+        $page = new \moodle_page();
+        $page->set_context(context_course::instance($course->id));
+        $page->set_pagelayout('course');
+
+        $student = $this->getDataGenerator()->create_user(['firstname' => 'Student', 'lastname' => '1']);
+        $teacher = $this->getDataGenerator()->create_user(['firstname' => 'Teacher', 'lastname' => '1']);
+
+        $this->getDataGenerator()->enrol_user($student->id, $course->id, 'student');
+        $this->getDataGenerator()->enrol_user($teacher->id, $course->id, 'teacher');
+
+        $module = $this->getDataGenerator()->create_module('coursework', [
+            'course' => $course->id,
+            'name' => 'Named coursework',
+            'deadline' => time() + DAYSECS,
+            'assessment_type' => 1,
+            'assessoranonymity' => 0,
+        ]);
+        $cm = get_coursemodule_from_instance('coursework', $module->id, $course->id);
+
+        $gradeitem = $this->getDataGenerator()->create_grade_item([
+            'courseid' => $course->id,
+            'itemmodule' => $cm->modname,
+            'iteminstance' => $cm->instance,
+            'itemname' => 'Named coursework',
+        ]);
+
+        $this->getDataGenerator()->create_grade_grade([
+            'itemid' => $gradeitem->id,
+            'userid' => $student->id,
+            'teamsubmission' => false,
+            'attemptnumber' => 0,
+            'grade' => '80',
+            'usermodified' => $teacher->id,
+            'timemodified' => time() - MINSECS,
+        ]);
+
+        $block = new \block_my_feedback();
+        $block->page = $page;
+
+        $feedback = $block->fetch_feedback($student);
+
+        $this->assertNotEmpty($feedback);
+        $this->assertEquals('Named coursework', $feedback[0]->name);
+        $this->assertEquals('Teacher 1', $feedback[0]->tutorname);
+    }
+
     /**
      * Assert that max 5 feedbacks are shown and only those not older than 3 month.
      *
