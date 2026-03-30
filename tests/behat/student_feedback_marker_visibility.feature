@@ -33,7 +33,7 @@ Feature: Student feedback hides coursework marker identity when assessor anonymi
     And I create a grade for user "student1" in "coursework" activity "Test coursework" in course "C1" graded by "teacher1"
     When I am logged in as "student1"
     And I follow "Dashboard"
-    Then I should see "Feedback for Student"
+    Then "My feedback" "block" should exist
     And I should see "Test coursework" in the "My feedback" "block"
     But I should not see "Teacher 1" in the "My feedback" "block"
 
@@ -50,6 +50,6 @@ Feature: Student feedback hides coursework marker identity when assessor anonymi
     And I create a grade for user "student1" in "coursework" activity "Test coursework" in course "C1" graded by "teacher1"
     When I am logged in as "student1"
     And I follow "Dashboard"
-    Then I should see "Feedback for Student"
+    Then "My feedback" "block" should exist
     And I should see "Test coursework" in the "My feedback" "block"
     And I should see "Teacher 1" in the "My feedback" "block"
