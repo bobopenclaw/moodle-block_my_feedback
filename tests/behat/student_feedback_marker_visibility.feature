@@ -30,7 +30,7 @@ Feature: Student feedback hides coursework marker identity when assessor anonymi
       | deadline           | ##tomorrow##      |
       | assessoranonymity  | 1                 |
     And I create a grade item for "coursework" activity "Test coursework" in course "C1" named "Test coursework"
-    And I create a grade for user "student1" in "Test coursework" activity "Test coursework" in course "C1" graded by "teacher1"
+    And I create a grade for user "student1" in "coursework" activity "Test coursework" in course "C1" graded by "teacher1"
     When I am logged in as "student1"
     And I follow "Dashboard"
     Then I should see "Feedback for Student"
@@ -47,7 +47,7 @@ Feature: Student feedback hides coursework marker identity when assessor anonymi
       | deadline           | ##tomorrow##      |
       | assessoranonymity  | 0                 |
     And I create a grade item for "coursework" activity "Test coursework" in course "C1" named "Test coursework"
-    And I create a grade for user "student1" in "Test coursework" activity "Test coursework" in course "C1" graded by "teacher1"
+    And I create a grade for user "student1" in "coursework" activity "Test coursework" in course "C1" graded by "teacher1"
     When I am logged in as "student1"
     And I follow "Dashboard"
     Then I should see "Feedback for Student"
