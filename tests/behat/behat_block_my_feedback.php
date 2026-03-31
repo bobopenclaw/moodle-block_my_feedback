@@ -181,14 +181,31 @@ class behat_block_my_feedback extends behat_base {
         $grade = (object) [
             'itemid' => $gradeitemid,
             'userid' => $userid,
-            'finalgrade' => 80,
             'rawgrade' => 80,
+            'rawgrademax' => 100,
+            'rawgrademin' => 0,
+            'finalgrade' => 80,
+            'hidden' => 0,
             'usermodified' => $graderid,
             'timemodified' => time() - MINSECS,
             'timecreated' => time() - MINSECS,
         ];
 
-        $DB->insert_record('grade_grades', $grade);
+        if ($existing = $DB->get_record('grade_grades', ['itemid' => $gradeitemid, 'userid' => $userid])) {
+            $grade->id = $existing->id;
+            $DB->update_record('grade_grades', $grade);
+        } else {
+            $DB->insert_record('grade_grades', $grade);
+        }
+
+        if ($gradeitem = $DB->get_record('grade_items', ['id' => $gradeitemid], '*', MUST_EXIST)) {
+            $gradeitem->hidden = 0;
+            $gradeitem->timemodified = time();
+            $DB->update_record('grade_items', $gradeitem);
+        }
+
+        $cm = get_coursemodule_from_id($modname, $activity->cmid, 0, false, MUST_EXIST);
+        rebuild_course_cache($cm->course, true);
     }
 
     /**
