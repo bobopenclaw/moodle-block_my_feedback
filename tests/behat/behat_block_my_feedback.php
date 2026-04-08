@@ -104,6 +104,110 @@ class behat_block_my_feedback extends behat_base {
         }
     }
 
+
+    /**
+     * Create a grade item for an activity.
+     *
+     * @Given /^I create a grade item for "(?P<modname>[^"]*)" activity "(?P<activityname>[^"]*)" in course "(?P<courseshortname>[^"]*)" named "(?P<itemname>[^"]*)"$/
+     * @param string $modname
+     * @param string $activityname
+     * @param string $courseshortname
+     * @param string $itemname
+     * @return void
+     */
+    public function create_grade_item_for_activity(string $modname, string $activityname, string $courseshortname, string $itemname): void {
+        global $DB;
+
+        $courseid = $DB->get_field('course', 'id', ['shortname' => $courseshortname], MUST_EXIST);
+        $activity = $this->get_activity_by_name($activityname);
+        if ($activity->modname !== $modname) {
+            throw new \coding_exception('Activity is not a ' . $modname . ': ' . $activityname);
+        }
+
+        if (!$DB->record_exists('grade_items', [
+            'courseid' => $courseid,
+            'itemtype' => 'mod',
+            'itemmodule' => $modname,
+            'iteminstance' => $activity->instanceid,
+            'itemnumber' => 0,
+        ])) {
+            $record = (object) [
+                'courseid' => $courseid,
+                'itemtype' => 'mod',
+                'itemmodule' => $modname,
+                'iteminstance' => $activity->instanceid,
+                'itemnumber' => 0,
+                'itemname' => $itemname,
+                'gradetype' => 1,
+                'grademax' => 100,
+                'grademin' => 0,
+                'timecreated' => time(),
+                'timemodified' => time(),
+            ];
+            $DB->insert_record('grade_items', $record);
+        }
+    }
+
+    /**
+     * Create a grade for a user in an activity.
+     *
+     * @Given /^I create a grade for user "(?P<username>[^"]*)" in "(?P<modname>[^"]*)" activity "(?P<activityname>[^"]*)" in course "(?P<courseshortname>[^"]*)" graded by "(?P<graderusername>[^"]*)"$/
+     * @param string $username
+     * @param string $modname
+     * @param string $activityname
+     * @param string $courseshortname
+     * @param string $graderusername
+     * @return void
+     */
+    public function create_grade_for_user_in_activity(string $username, string $modname, string $activityname, string $courseshortname, string $graderusername): void {
+        global $DB;
+
+        $courseid = $DB->get_field('course', 'id', ['shortname' => $courseshortname], MUST_EXIST);
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $graderid = $DB->get_field('user', 'id', ['username' => $graderusername], MUST_EXIST);
+        $activity = $this->get_activity_by_name($activityname);
+        if ($activity->modname !== $modname) {
+            throw new \coding_exception('Activity is not a ' . $modname . ': ' . $activityname);
+        }
+
+        $gradeitemid = $DB->get_field('grade_items', 'id', [
+            'courseid' => $courseid,
+            'itemtype' => 'mod',
+            'itemmodule' => $modname,
+            'iteminstance' => $activity->instanceid,
+            'itemnumber' => 0,
+        ], MUST_EXIST);
+
+        $grade = (object) [
+            'itemid' => $gradeitemid,
+            'userid' => $userid,
+            'rawgrade' => 80,
+            'rawgrademax' => 100,
+            'rawgrademin' => 0,
+            'finalgrade' => 80,
+            'hidden' => 0,
+            'usermodified' => $graderid,
+            'timemodified' => time() - MINSECS,
+            'timecreated' => time() - MINSECS,
+        ];
+
+        if ($existing = $DB->get_record('grade_grades', ['itemid' => $gradeitemid, 'userid' => $userid])) {
+            $grade->id = $existing->id;
+            $DB->update_record('grade_grades', $grade);
+        } else {
+            $DB->insert_record('grade_grades', $grade);
+        }
+
+        if ($gradeitem = $DB->get_record('grade_items', ['id' => $gradeitemid], '*', MUST_EXIST)) {
+            $gradeitem->hidden = 0;
+            $gradeitem->timemodified = time();
+            $DB->update_record('grade_items', $gradeitem);
+        }
+
+        $cm = get_coursemodule_from_id($modname, $activity->cmid, 0, false, MUST_EXIST);
+        rebuild_course_cache($cm->course, true);
+    }
+
     /**
      * Get activity data by name.
      *
