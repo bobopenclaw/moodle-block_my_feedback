@@ -104,6 +104,7 @@ class behat_block_my_feedback extends behat_base {
         }
     }
 
+
     /**
      * Get activity data by name.
      *

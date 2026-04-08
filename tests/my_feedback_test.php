@@ -235,6 +235,213 @@ final class my_feedback_test extends advanced_testcase {
         }
     }
 
+
+    /**
+     * Test submissions are returned from multiple enrolled courses.
+     *
+     * @return void
+     * @throws \coding_exception
+     * @throws \dml_exception
+     * @covers ::get_submissions
+     */
+    public function test_get_submissions_from_multiple_courses(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $course1 = $this->getDataGenerator()->create_course(['shortname' => 'C1']);
+        $course2 = $this->getDataGenerator()->create_course(['shortname' => 'C2']);
+
+        $page = new \moodle_page();
+        $page->set_context(context_course::instance($course1->id));
+        $page->set_pagelayout('course');
+
+        $student = $this->getDataGenerator()->create_user();
+        $teacher = $this->getDataGenerator()->create_user();
+
+        $this->getDataGenerator()->enrol_user($student->id, $course1->id, 'student');
+        $this->getDataGenerator()->enrol_user($student->id, $course2->id, 'student');
+        $this->getDataGenerator()->enrol_user($teacher->id, $course1->id, 'teacher');
+        $this->getDataGenerator()->enrol_user($teacher->id, $course2->id, 'teacher');
+
+        foreach ([[$course1, 'Assign course 1'], [$course2, 'Assign course 2']] as [$course, $name]) {
+            $module = $this->getDataGenerator()->create_module('assign', [
+                'course' => $course->id,
+                'name' => $name,
+            ]);
+            $cm = get_coursemodule_from_instance('assign', $module->id, $course->id);
+
+            $gradeitem = $this->getDataGenerator()->create_grade_item([
+                'courseid' => $course->id,
+                'itemmodule' => $cm->modname,
+                'iteminstance' => $cm->instance,
+                'itemname' => $name,
+            ]);
+
+            $this->getDataGenerator()->create_grade_grade([
+                'itemid' => $gradeitem->id,
+                'userid' => $student->id,
+                'teamsubmission' => false,
+                'attemptnumber' => 0,
+                'grade' => '75',
+                'usermodified' => $teacher->id,
+                'timemodified' => time() - HOURSECS,
+            ]);
+        }
+
+        $block = new \block_my_feedback();
+        $block->page = $page;
+
+        $submissions = $block->get_submissions($student);
+        $courses = array_unique(array_map(fn($submission) => $submission->course, $submissions));
+        sort($courses);
+
+        $this->assertCount(2, $submissions);
+        $this->assertEqualsCanonicalizing([$course1->id, $course2->id], $courses);
+    }
+
+
+    /**
+     * Test coursework marker identity is hidden when assessor anonymity is enabled.
+     *
+     * @return void
+     * @throws \coding_exception
+     * @throws \dml_exception
+     * @covers ::fetch_feedback
+     */
+    public function test_fetch_feedback_hides_coursework_marker_when_anonymous(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        if (!$DB->get_manager()->table_exists('coursework')) {
+            $this->markTestSkipped('mod_coursework is not installed.');
+        }
+
+        $course = $this->getDataGenerator()->create_course();
+        $page = new \moodle_page();
+        $page->set_context(context_course::instance($course->id));
+        $page->set_pagelayout('course');
+
+        $student = $this->getDataGenerator()->create_user(['firstname' => 'Student', 'lastname' => '1']);
+        $teacher = $this->getDataGenerator()->create_user(['firstname' => 'Teacher', 'lastname' => '1']);
+
+        $this->getDataGenerator()->enrol_user($student->id, $course->id, 'student');
+        $this->getDataGenerator()->enrol_user($teacher->id, $course->id, 'teacher');
+
+        $module = $this->getDataGenerator()->create_module('coursework', [
+            'course' => $course->id,
+            'name' => 'Anonymous coursework',
+            'deadline' => time() + DAYSECS,
+            'assessment_type' => 1,
+            'assessoranonymity' => 1,
+        ]);
+        $cm = get_coursemodule_from_instance('coursework', $module->id, $course->id);
+
+        $gradeitem = $this->getDataGenerator()->create_grade_item([
+            'courseid' => $course->id,
+            'itemmodule' => $cm->modname,
+            'iteminstance' => $cm->instance,
+            'itemname' => 'Anonymous coursework',
+        ]);
+
+        $this->getDataGenerator()->create_grade_grade([
+            'itemid' => $gradeitem->id,
+            'userid' => $student->id,
+            'teamsubmission' => false,
+            'attemptnumber' => 0,
+            'grade' => '80',
+            'usermodified' => $teacher->id,
+            'timemodified' => time() - MINSECS,
+        ]);
+
+        $block = new \block_my_feedback();
+        $block->page = $page;
+
+        $submissions = $block->get_submissions($student);
+        $this->assertNotEmpty($submissions);
+        $this->assertEquals('coursework', $submissions[0]->modname);
+        $this->assertEquals(1, (int)$submissions[0]->assessoranonymity);
+        $this->assertTrue(empty($submissions[0]->hidegrader));
+
+        $feedback = $block->fetch_feedback($student);
+
+        $this->assertNotEmpty($feedback);
+        $this->assertEquals('Anonymous coursework', $feedback[0]->name);
+        $this->assertObjectNotHasProperty('tutorname', $feedback[0]);
+    }
+
+    /**
+     * Test coursework marker identity is shown when assessor anonymity is disabled.
+     *
+     * @return void
+     * @throws \coding_exception
+     * @throws \dml_exception
+     * @covers ::fetch_feedback
+     */
+    public function test_fetch_feedback_shows_coursework_marker_when_not_anonymous(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        if (!$DB->get_manager()->table_exists('coursework')) {
+            $this->markTestSkipped('mod_coursework is not installed.');
+        }
+
+        $course = $this->getDataGenerator()->create_course();
+        $page = new \moodle_page();
+        $page->set_context(context_course::instance($course->id));
+        $page->set_pagelayout('course');
+
+        $student = $this->getDataGenerator()->create_user(['firstname' => 'Student', 'lastname' => '1']);
+        $teacher = $this->getDataGenerator()->create_user(['firstname' => 'Teacher', 'lastname' => '1']);
+
+        $this->getDataGenerator()->enrol_user($student->id, $course->id, 'student');
+        $this->getDataGenerator()->enrol_user($teacher->id, $course->id, 'teacher');
+
+        $module = $this->getDataGenerator()->create_module('coursework', [
+            'course' => $course->id,
+            'name' => 'Named coursework',
+            'deadline' => time() + DAYSECS,
+            'assessment_type' => 1,
+            'assessoranonymity' => 0,
+        ]);
+        $cm = get_coursemodule_from_instance('coursework', $module->id, $course->id);
+
+        $gradeitem = $this->getDataGenerator()->create_grade_item([
+            'courseid' => $course->id,
+            'itemmodule' => $cm->modname,
+            'iteminstance' => $cm->instance,
+            'itemname' => 'Named coursework',
+        ]);
+
+        $this->getDataGenerator()->create_grade_grade([
+            'itemid' => $gradeitem->id,
+            'userid' => $student->id,
+            'teamsubmission' => false,
+            'attemptnumber' => 0,
+            'grade' => '80',
+            'usermodified' => $teacher->id,
+            'timemodified' => time() - MINSECS,
+        ]);
+
+        $block = new \block_my_feedback();
+        $block->page = $page;
+
+        $submissions = $block->get_submissions($student);
+        $this->assertNotEmpty($submissions);
+        $this->assertEquals('coursework', $submissions[0]->modname);
+        $this->assertEquals(0, (int)$submissions[0]->assessoranonymity);
+        $this->assertTrue(empty($submissions[0]->hidegrader));
+
+        $feedback = $block->fetch_feedback($student);
+
+        $this->assertNotEmpty($feedback);
+        $this->assertEquals('Named coursework', $feedback[0]->name);
+        $this->assertEquals('Teacher 1', $feedback[0]->tutorname);
+    }
+
     /**
      * Test submissions are returned from multiple enrolled courses.
      *
