@@ -409,7 +409,7 @@ class block_my_feedback extends block_base {
             $feedback = new stdClass();
             $feedback->releaseddate = date('jS M', $f->lastmodified);
             $feedback->name = $f->name;
-            $feedback->url = new moodle_url('/mod/' . $f->modname . '/view.php', ['id' => $f->cmid]);
+            $feedback->url = new moodle_url('/mod/' . $cm->modname . '/view.php', ['id' => $cm->id]);
             $feedback->coursename = $course->fullname;
 
             if (!$feedbackdata->hidegrader && ($grader = core_user::get_user($f->grader))) {
