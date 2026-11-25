@@ -119,8 +119,6 @@ Feature: As a marker I want to see submissions assigned to me or awaiting alloca
       | student2  | teacher2  |
 
     And I am logged in as "teacher1"
-    And I am on site homepage
-    And I follow "Dashboard"
     Then I should see "2 to mark"
 
   Scenario: A Teacher should not see upcoming markings for submission from students where others are assigned as marker.

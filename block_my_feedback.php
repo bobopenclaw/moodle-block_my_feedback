@@ -47,11 +47,8 @@ class block_my_feedback extends block_base {
      */
     private bool $isstudent;
 
-    /** @var int|null User whose marker role assignments are cached. */
-    private ?int $markerassignmentuserid = null;
-
-    /** @var array<int, stdClass> Context IDs where the cached user has a marker role. */
-    private array $markerassignmentcontexts = [];
+    /** @var array<int, stdClass>|null Context IDs where the current user has a marker role. */
+    private ?array $markerassignmentcontexts = null;
 
     /**
      * Initialises the block.
@@ -61,7 +58,7 @@ class block_my_feedback extends block_base {
     public function init() {
         $this->markerroles = $this->get_marker_role_ids();
         $this->studentroles = $this->get_student_role_ids();
-        $this->ismarker = $this->is_marker();
+        $this->ismarker = !empty($this->get_marker_assignment_contexts());
         $this->isstudent = $this->is_student();
 
         // No title for the block as each section will have one.
@@ -124,14 +121,20 @@ class block_my_feedback extends block_base {
 
         $template = new stdClass();
 
+        // Get the user's enrolled courses once for both sections.
+        $courses = [];
+        if ($this->ismarker || $this->isstudent) {
+            $courses = enrol_get_all_users_courses($USER->id, true, ['enddate']);
+        }
+
         // Marker content.
-        if ($this->ismarker && $template->markingmods = $this->fetch_marking($USER)) {
+        if ($this->ismarker && $template->markingmods = $this->fetch_marking($USER, $courses)) {
             $template->showmarkings = true;
             $template->markingheader = get_string('markingfor', 'block_my_feedback', $USER->firstname);
         }
 
         // Student content.
-        if ($this->isstudent && $template->assessmentmods = $this->fetch_feedback($USER)) {
+        if ($this->isstudent && $template->assessmentmods = $this->fetch_feedback($USER, $courses)) {
             $template->showassessments = true;
             $template->assessmentheader = get_string('feedbackfor', 'block_my_feedback', $USER->firstname);
         }
@@ -145,34 +148,19 @@ class block_my_feedback extends block_base {
     }
 
     /**
-     * Return if user has required marker role at all.
-     *
-     * @return bool
-     */
-    private function is_marker(): bool {
-        global $USER;
-
-        return !empty($this->get_marker_assignment_contexts((int)$USER->id));
-    }
-
-    /**
      * Return if user has required marker role in given course.
      *
      * @param stdClass $course
-     * @param int $userid
      * @return bool
      */
-    private function is_course_marker(stdClass $course, int $userid): bool {
-        $assignments = $this->get_marker_assignment_contexts($userid);
+    private function is_course_marker(stdClass $course): bool {
+        $assignments = $this->get_marker_assignment_contexts();
         if (!$assignments) {
             return false;
         }
 
         // As with user_has_role_assignment(), roles inherited from parent contexts count.
-        $context = context::instance_by_id($course->ctxid, IGNORE_MISSING);
-        if (!$context) {
-            return false;
-        }
+        $context = context::instance_by_id($course->ctxid);
         foreach ($context->get_parent_context_ids(true) as $contextid) {
             if (isset($assignments[$contextid])) {
                 return true;
@@ -182,26 +170,24 @@ class block_my_feedback extends block_base {
     }
 
     /**
-     * Load marker role assignment contexts once per user and block instance.
+     * Load the current user's marker role assignment contexts once per block instance.
      *
-     * @param int $userid
      * @return array<int, stdClass>
      */
-    private function get_marker_assignment_contexts(int $userid): array {
-        global $DB;
+    private function get_marker_assignment_contexts(): array {
+        global $DB, $USER;
 
-        if ($this->markerassignmentuserid === $userid) {
+        if ($this->markerassignmentcontexts !== null) {
             return $this->markerassignmentcontexts;
         }
 
-        $this->markerassignmentuserid = $userid;
         $this->markerassignmentcontexts = [];
         if (!$this->markerroles) {
             return [];
         }
 
         [$rolesql, $params] = $DB->get_in_or_equal($this->markerroles, SQL_PARAMS_NAMED, 'role');
-        $params['userid'] = $userid;
+        $params['userid'] = $USER->id;
         $this->markerassignmentcontexts = $DB->get_records_sql(
             "SELECT DISTINCT contextid
                FROM {role_assignments}
@@ -237,16 +223,17 @@ class block_my_feedback extends block_base {
      * Return marking for a user.
      *
      * @param stdClass $user
+     * @param array|null $courses User's enrolled courses indexed by course ID.
      * @return array|null
      */
-    public function fetch_marking(stdClass $user): ?array {
-        $courses = enrol_get_all_users_courses($user->id, true, ['enddate']);
+    public function fetch_marking(stdClass $user, ?array $courses = null): ?array {
+        $courses ??= enrol_get_all_users_courses($user->id, true, ['enddate']);
         $markercourses = [];
         foreach ($courses as $course) {
             if (!$course->visible || !$this->is_course_current($course)) {
                 continue;
             }
-            if (!$this->is_course_marker($course, $user->id)) {
+            if (!$this->is_course_marker($course)) {
                 continue;
             }
             $markercourses[$course->id] = $course;
@@ -272,7 +259,6 @@ class block_my_feedback extends block_base {
                 continue;
             }
 
-            $course = $markercourses[$courseid];
             if (!$mod->visible) {
                 continue;
             }
@@ -308,15 +294,12 @@ class block_my_feedback extends block_base {
                     (int) $target->duedate,
                     $academicyearbycourse[$courseid]
                 );
-                if (
-                    !$this->duedate_in_range((int) $target->duedate)
-                        && !$this->duedate_in_range($feedbackduedate)
-                ) {
+                if (!self::dates_in_range((int) $target->duedate, $feedbackduedate)) {
                     continue;
                 }
 
                 $candidates[] = (object) [
-                    'course' => $course,
+                    'course' => $markercourses[$courseid],
                     'mod' => $mod,
                     'modulehelper' => $modulehelper,
                     'target' => $target,
@@ -329,7 +312,6 @@ class block_my_feedback extends block_base {
         // Expensive missing-grade counts are only needed until five matching targets are found.
         usort($candidates, static fn($a, $b): int => $a->feedbackduedate <=> $b->feedbackduedate);
         $marking = [];
-        $courseimages = [];
         foreach ($candidates as $candidate) {
             $course = $candidate->course;
             $mod = $candidate->mod;
@@ -355,8 +337,8 @@ class block_my_feedback extends block_base {
                 $assess->name .= ' ' . $target->partname;
             }
             $assess->url = new moodle_url('/mod/' . $mod->modname . '/view.php', ['id' => $mod->id]);
-            $courseimages[$course->id] ??= course_summary_exporter::get_course_image($course);
-            $assess->icon = $courseimages[$course->id];
+            $course->image ??= course_summary_exporter::get_course_image($course);
+            $assess->icon = $course->image;
             $marking[] = $assess;
             if (count($marking) === 5) {
                 break;
@@ -382,10 +364,7 @@ class block_my_feedback extends block_base {
         int $submissionduedate = 0
     ): bool {
         // Keep the old submission-date window, and include items whose feedback deadline is in range.
-        if (
-            $feedbackduedate === 0 ||
-            (!$this->duedate_in_range((int)$submissionduedate) && !$this->duedate_in_range($feedbackduedate))
-        ) {
+        if (!self::dates_in_range($submissionduedate, $feedbackduedate)) {
             return false;
         }
 
@@ -431,20 +410,22 @@ class block_my_feedback extends block_base {
     }
 
     /**
-     * Return if a due date is in the date range.
+     * Return whether either date falls in the display range.
      *
-     * @param int $duedate
-     * @return int|null
+     * @param int $submissionduedate
+     * @param int $feedbackduedate
+     * @return bool
      */
-    public function duedate_in_range(int $duedate): ?int {
+    public static function dates_in_range(int $submissionduedate, int $feedbackduedate): bool {
+        if ($feedbackduedate === 0) {
+            return false;
+        }
+
         $startdate = strtotime('-2 month');
         $cutoffdate = strtotime('+1 month');
 
-        if ($duedate < $startdate || $duedate > $cutoffdate) {
-            return null;
-        }
-
-        return $duedate;
+        return ($submissionduedate >= $startdate && $submissionduedate <= $cutoffdate) ||
+            ($feedbackduedate >= $startdate && $feedbackduedate <= $cutoffdate);
     }
 
     /**
@@ -453,12 +434,14 @@ class block_my_feedback extends block_base {
      * Return users 5 most recent feedbacks.
      *
      * @param stdClass $user
+     * @param array|null $courses User's enrolled courses indexed by course ID.
      * @return array|null feedback items.
      */
-    public function fetch_feedback($user): ?array {
+    public function fetch_feedback(stdClass $user, ?array $courses = null): ?array {
         global $DB;
 
-        $submissions = $this->get_submissions($user);
+        $courses ??= enrol_get_all_users_courses($user->id, true, ['enddate']);
+        $submissions = $this->get_submissions($user, $courses);
 
         // No feedback.
         if (!$submissions) {
@@ -470,7 +453,6 @@ class block_my_feedback extends block_base {
         $modinfos = [];
         $modulehelpers = [];
         $courserecords = [];
-        $courseimages = [];
 
         foreach ($submissions as $f) {
             $modinfos[$f->course] ??= get_fast_modinfo($f->course);
@@ -506,8 +488,8 @@ class block_my_feedback extends block_base {
                 $feedback->icon = $icon;
             } else {
                 // Otherwise return course image.
-                $courseimages[$f->course] ??= course_summary_exporter::get_course_image($course);
-                $feedback->icon = $courseimages[$f->course];
+                $course->image ??= course_summary_exporter::get_course_image($course);
+                $feedback->icon = $course->image;
             }
 
             $feedbacks[] = $feedback;
@@ -524,15 +506,16 @@ class block_my_feedback extends block_base {
      * Activity visibility is checked when the feedback is displayed.
      *
      * @param stdClass $user
+     * @param array|null $courses User's enrolled courses indexed by course ID.
      * @return array
      * @throws coding_exception
      */
-    public function get_submissions($user) {
+    public function get_submissions(stdClass $user, ?array $courses = null): array {
         global $DB;
 
         $since = strtotime('-3 month');
         $supported = $this->get_supported_types();
-        $courses = enrol_get_all_users_courses($user->id, true, ['enddate']);
+        $courses ??= enrol_get_all_users_courses($user->id, true, ['enddate']);
         $currentcourses = [];
         foreach ($courses as $course) {
             if ($course->visible && $this->is_course_current($course)) {

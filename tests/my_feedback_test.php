@@ -289,6 +289,28 @@ final class my_feedback_test extends advanced_testcase {
     }
 
     /**
+     * A supplied course list constrains the submissions query.
+     *
+     * @covers ::get_submissions
+     */
+    public function test_get_submissions_uses_supplied_course_list(): void {
+        $this->assertSame([], $this->block->get_submissions($this->student1, []));
+    }
+
+    /**
+     * Feedback date range checks either date and rejects missing feedback deadlines.
+     *
+     * @covers ::dates_in_range
+     */
+    public function test_dates_in_range(): void {
+        $now = time();
+        $this->assertTrue(\block_my_feedback::dates_in_range(strtotime('-4 month'), $now));
+        $this->assertTrue(\block_my_feedback::dates_in_range($now, $now + DAYSECS));
+        $this->assertFalse(\block_my_feedback::dates_in_range($now, 0));
+        $this->assertFalse(\block_my_feedback::dates_in_range(strtotime('-4 month'), strtotime('-3 month')));
+    }
+
+    /**
      * User-hidden grades are not returned as feedback until their hide time has passed.
      *
      * @return void
