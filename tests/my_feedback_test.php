@@ -267,7 +267,8 @@ final class my_feedback_test extends advanced_testcase {
      * @covers ::get_submissions
      */
     public function test_get_submissions(): void {
-        $submissions = $this->block->get_submissions($this->student1);
+        $student1courses = enrol_get_all_users_courses($this->student1->id, true, ['enddate']);
+        $submissions = $this->block->get_submissions($this->student1, $student1courses);
         foreach ($submissions as $submission) {
             // Assert that all submissions are by the given user.
             $this->assertEquals($this->student1->id, $submission->userid);
@@ -277,7 +278,8 @@ final class my_feedback_test extends advanced_testcase {
             $this->assertTrue($submission->lastmodified >= strtotime('-3 month'));
         }
 
-        $submissions = $this->block->get_submissions($this->student2);
+        $student2courses = enrol_get_all_users_courses($this->student2->id, true, ['enddate']);
+        $submissions = $this->block->get_submissions($this->student2, $student2courses);
         foreach ($submissions as $submission) {
             // Assert that all submissions are by the given user.
             $this->assertEquals($this->student2->id, $submission->userid);
@@ -328,14 +330,15 @@ final class my_feedback_test extends advanced_testcase {
             'itemid' => $item->id,
             'userid' => $this->student1->id,
         ], '*', MUST_EXIST);
-        $submissions = $this->block->get_submissions($this->student1);
+        $courses = enrol_get_all_users_courses($this->student1->id, true, ['enddate']);
+        $submissions = $this->block->get_submissions($this->student1, $courses);
         $gradeids = array_column($submissions, 'gradeid');
         $this->assertContains((int)$grade->id, array_map('intval', $gradeids));
 
         $grade->hidden = time() + DAYSECS;
         $DB->update_record('grade_grades', $grade);
 
-        $submissions = $this->block->get_submissions($this->student1);
+        $submissions = $this->block->get_submissions($this->student1, $courses);
         $gradeids = array_column($submissions, 'gradeid');
 
         $this->assertNotContains((int)$grade->id, array_map('intval', $gradeids));
@@ -392,7 +395,8 @@ final class my_feedback_test extends advanced_testcase {
         $block = new \block_my_feedback();
         $block->page = $page;
 
-        $submissions = $block->get_submissions($student);
+        $enrolledcourses = enrol_get_all_users_courses($student->id, true, ['enddate']);
+        $submissions = $block->get_submissions($student, $enrolledcourses);
         $courses = array_unique(array_map(fn($submission) => $submission->course, $submissions));
         sort($courses);
 
@@ -409,7 +413,8 @@ final class my_feedback_test extends advanced_testcase {
      */
     public function test_fetch_feedback(): void {
         // Test the feedback as student1.
-        $feedback = $this->block->fetch_feedback($this->student1);
+        $student1courses = enrol_get_all_users_courses($this->student1->id, true, ['enddate']);
+        $feedback = $this->block->fetch_feedback($this->student1, $student1courses);
         $this->assertNotEmpty($feedback, 'Returning recent visible feedback for student 1.');
         $this->assertLessThanOrEqual(5, count($feedback), 'Returning no more than 5 submissions for student 1.');
 
@@ -421,7 +426,8 @@ final class my_feedback_test extends advanced_testcase {
         }
 
         // Test the feedback as student2 - there should be at most one visible recent item.
-        $feedback = $this->block->fetch_feedback($this->student2);
+        $student2courses = enrol_get_all_users_courses($this->student2->id, true, ['enddate']);
+        $feedback = $this->block->fetch_feedback($this->student2, $student2courses);
         if ($feedback !== null) {
             $this->assertCount(1, $feedback, 'Returning only 1 visible recent submission for student 2.');
         }
@@ -436,7 +442,8 @@ final class my_feedback_test extends advanced_testcase {
         global $DB;
 
         $this->setUser($this->student1);
-        $feedback = $this->block->fetch_feedback($this->student1);
+        $courses = enrol_get_all_users_courses($this->student1->id, true, ['enddate']);
+        $feedback = $this->block->fetch_feedback($this->student1, $courses);
         $this->assertNotNull($feedback);
         $this->assertContains('Grade assign item 1', array_column($feedback, 'name'));
 
@@ -446,7 +453,7 @@ final class my_feedback_test extends advanced_testcase {
         set_coursemodule_visible($cm->id, 0);
 
         $this->setUser($this->student1);
-        $feedback = $this->block->fetch_feedback($this->student1);
+        $feedback = $this->block->fetch_feedback($this->student1, $courses);
         $this->assertNotNull($feedback);
         $this->assertNotContains('Grade assign item 1', array_column($feedback, 'name'));
     }
@@ -477,7 +484,8 @@ final class my_feedback_test extends advanced_testcase {
 
         $DB->set_field('grade_grades', 'usermodified', null, ['id' => $assignsubmission->id]);
 
-        $feedback = $this->block->fetch_feedback($this->student1);
+        $courses = enrol_get_all_users_courses($this->student1->id, true, ['enddate']);
+        $feedback = $this->block->fetch_feedback($this->student1, $courses);
 
         $this->assertNotNull($feedback);
 
