@@ -226,8 +226,7 @@ class block_my_feedback extends block_base {
      * @param array|null $courses User's enrolled courses indexed by course ID.
      * @return array|null
      */
-    public function fetch_marking(stdClass $user, ?array $courses = null): ?array {
-        $courses ??= enrol_get_all_users_courses($user->id, true, ['enddate']);
+    public function fetch_marking(stdClass $user, array $courses): ?array {
         $markercourses = [];
         foreach ($courses as $course) {
             if (!$course->visible || !$this->is_course_current($course)) {
@@ -437,10 +436,9 @@ class block_my_feedback extends block_base {
      * @param array|null $courses User's enrolled courses indexed by course ID.
      * @return array|null feedback items.
      */
-    public function fetch_feedback(stdClass $user, ?array $courses = null): ?array {
+    public function fetch_feedback(stdClass $user, array $courses): ?array {
         global $DB;
 
-        $courses ??= enrol_get_all_users_courses($user->id, true, ['enddate']);
         $submissions = $this->get_submissions($user, $courses);
 
         // No feedback.
@@ -510,12 +508,11 @@ class block_my_feedback extends block_base {
      * @return array
      * @throws coding_exception
      */
-    public function get_submissions(stdClass $user, ?array $courses = null): array {
+    public function get_submissions(stdClass $user, array $courses): array {
         global $DB;
 
         $since = strtotime('-3 month');
         $supported = $this->get_supported_types();
-        $courses ??= enrol_get_all_users_courses($user->id, true, ['enddate']);
         $currentcourses = [];
         foreach ($courses as $course) {
             if ($course->visible && $this->is_course_current($course)) {
